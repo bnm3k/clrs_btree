@@ -10,7 +10,10 @@ import (
 )
 
 // for debugging/testing
-func checkInvariances(b *btree) error {
+func checkInvariances(b *btree, expectedLen int) error {
+	if b.len != expectedLen {
+		return fmt.Errorf("Expected btree to have len %d, instead has len %d", expectedLen, b.len)
+	}
 	var traverseItems func(n *node, fn func(i item))
 	traverseItems = func(n *node, fn func(i item)) {
 		var i int
@@ -132,17 +135,13 @@ func TestBtreeBasic(t *testing.T) {
 	// newBtree
 	b := newBTree(T)
 	require.NotNil(t, b)
-	err := checkInvariances(b)
-	require.NoError(t, err, testInfo)
-	require.Equal(t, 0, b.len, testInfo)
+	require.NoError(t, checkInvariances(b, 0), testInfo)
 
 	for _, num := range nums {
 		prev := b.insert(num)
 		require.Nil(t, prev, testInfo)
 	}
-	err = checkInvariances(b)
-	require.NoError(t, err, testInfo)
-	require.Equal(t, N, b.len, testInfo)
+	require.NoError(t, checkInvariances(b, N), testInfo)
 
 	// reinsert N items
 	for _, num := range nums {
@@ -150,9 +149,7 @@ func TestBtreeBasic(t *testing.T) {
 		require.NotNil(t, prev, testInfo)
 		require.Equal(t, equal, prev.compare(num))
 	}
-	err = checkInvariances(b)
-	require.NoError(t, err, testInfo)
-	require.Equal(t, N, b.len, testInfo)
+	require.NoError(t, checkInvariances(b, N), testInfo)
 
 	// search for N items that we know are present
 	for _, num := range nums {
@@ -161,14 +158,11 @@ func TestBtreeBasic(t *testing.T) {
 		require.Equal(t, equal, num.compare(found))
 
 	}
-	err = checkInvariances(b)
-	require.NoError(t, err, testInfo)
-	require.Equal(t, N, b.len, testInfo)
+	require.NoError(t, checkInvariances(b, N), testInfo)
 
 	// search for 50 items that we know are NOT present
 	for i := N; i < N+50; i++ {
 		found := b.search(numItem(i))
 		require.Nil(t, found, testInfo)
-
 	}
 }
