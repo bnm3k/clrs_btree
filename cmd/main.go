@@ -67,22 +67,6 @@ func (n *node) search(item item) item {
 	return n.children[lastChildIndex].search(item)
 }
 
-func (n *node) insertIndex(newItem item) (i int, shouldReplace bool) {
-loop:
-	for i = 0; i < n.n; i++ {
-		curr := n.items[i]
-		switch newItem.compare(curr) {
-		case equal:
-			shouldReplace = true
-			break loop
-		case lessThan:
-			copy(n.items[i+1:], n.items[i:])
-			break loop
-		}
-	}
-	return
-}
-
 func (n *node) insertLeaf(newItem item) (prev item) {
 	var i int
 loop:
@@ -166,8 +150,9 @@ func (n *node) splitChild(t int, i int) (median item) {
 }
 
 type btree struct {
-	t    int
 	root *node
+	t    int
+	len  int
 }
 
 // t is the minimum degree a node is allowed to have.
@@ -191,14 +176,103 @@ func (b *btree) search(item item) item {
 	return b.root.search(item)
 }
 
-func (b *btree) insert(item item) {
+// for debugging
+func (b *btree) checkInvariances() error {
+	var traverseItems func(n *node, fn func(i item))
+	traverseItems = func(n *node, fn func(i item)) {
+		var i int
+		for i = 0; i < n.n; i++ {
+			// first traverse children if internal
+			if !n.isLeaf {
+				traverseItems(n.children[i], fn)
+			}
+			fn(n.items[i])
+		}
+		// traverse last child
+		if !n.isLeaf {
+			traverseItems(n.children[i], fn)
+		}
+	}
+
+	// check that there are no duplicates and all items are in ascending order
+	// this also implictly checks that for every key k, all the items at that subtree
+	// are less than key k
+	var items []item
+	traverseItems(b.root, func(i item) {
+		items = append(items, i)
+	})
+	for i := 1; i < len(items); i++ {
+		switch items[i].compare(items[i-1]) {
+		case equal:
+			return fmt.Errorf("btree contains duplicate items: %v, %v", items[i-1], items[i])
+		case lessThan:
+			return fmt.Errorf("btree items not in sorted order (ascending)\n: %v comes before %v", items[i-1], items[i])
+		}
+	}
+
+	// preOrder-ish traversal, ie traverse node then children
+	var traverseNode func(n *node, fn func(n *node))
+	traverseNode = func(n *node, fn func(n *node)) {
+		fn(n)
+		if !n.isLeaf {
+			for i := 0; i < n.n+1; i++ {
+				traverseNode(n.children[i], fn)
+			}
+		}
+	}
+
+	// check that all nodes have correct n
+	if b.root.n > 2*b.t-1 {
+		return fmt.Errorf("Root node has invalid n: %d", b.root.n)
+	}
+	var err error
+	if !b.root.isLeaf {
+		for i := 0; i < b.root.n+1; i++ {
+			traverseNode(b.root.children[i], func(n *node) {
+				if n.n < b.t-1 || n.n > 2*b.t-1 {
+					err = fmt.Errorf("One of the nodes has invalid n: %d", n.n)
+				}
+			})
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	// check that all leaves are at same height
+	var leafHeights []int
+	var traverseHeight func(n *node, level int)
+	traverseHeight = func(n *node, level int) {
+		if n.isLeaf {
+			leafHeights = append(leafHeights, level)
+		} else {
+			for i := 0; i <= n.n; i++ {
+				traverseHeight(n.children[i], level+1)
+			}
+		}
+	}
+	traverseHeight(b.root, 1)
+	height := leafHeights[0]
+	for _, h := range leafHeights {
+		if h != height {
+			return fmt.Errorf("one of the leaf nodes does not have the same height as the rest: %d vs %d", h, height)
+		}
+	}
+	return nil
+}
+
+func (b *btree) insert(item item) (prev item) {
 	if b.root.n == (2*b.t - 1) {
 		oldRoot := b.root
 		b.root = newNode(b.t, false)
 		b.root.children[0] = oldRoot
 		b.root.splitChild(b.t, 0)
 	}
-	b.root.insert(b.t, item)
+	prev = b.root.insert(b.t, item)
+	if prev == nil {
+		b.len++
+	}
+	return
 }
 
 func insertAt(arr []int, index int, item int) []int {
@@ -223,10 +297,13 @@ func (n numItem) compare(other item) int {
 }
 
 func main() {
-	b := newBTree(5)
-	var n int = 20
-	for i := 1; i <= 10; i++ {
+	b := newBTree(2)
+	var n int = 300
+	for i := 1; i <= 100; i++ {
 		b.insert(numItem(n))
-		n--
+		n++
+	}
+	if err := b.checkInvariances(); err != nil {
+		panic(err)
 	}
 }
