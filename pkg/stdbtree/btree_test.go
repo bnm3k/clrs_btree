@@ -116,9 +116,10 @@ func TestBtreeBasic(t *testing.T) {
 	})
 
 	// test parameters
-	N := 300
-	T := 2
 	seedVal := time.Now().UnixNano()
+	rand.Seed(seedVal)
+	N := 300
+	T := rand.Intn(19) + 2                                        // [2,20]
 	testInfo := fmt.Sprintf("[seedVal = %d, T = %d]", seedVal, T) // for replication
 
 	// test values
@@ -126,7 +127,6 @@ func TestBtreeBasic(t *testing.T) {
 	for i := 0; i < N; i++ {
 		nums = append(nums, numItem(i))
 	}
-	rand.Seed(seedVal)
 	rand.Shuffle(len(nums), func(i, j int) { nums[i], nums[j] = nums[j], nums[i] })
 
 	// newBtree
@@ -165,4 +165,10 @@ func TestBtreeBasic(t *testing.T) {
 	require.NoError(t, err, testInfo)
 	require.Equal(t, N, b.len, testInfo)
 
+	// search for 50 items that we know are NOT present
+	for i := N; i < N+50; i++ {
+		found := b.search(numItem(i))
+		require.Nil(t, found, testInfo)
+
+	}
 }
